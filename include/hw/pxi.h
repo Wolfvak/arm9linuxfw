@@ -2,24 +2,18 @@
 
 #include "common.h"
 
-namespace HW::PXI {
-	enum {
-		IRQ_SYNC_TRIGGERED = 0xC,
-		IRQ_TX_NOT_FULL = 0xD,
-		IRQ_RX_NOT_EMPTY = 0xE,
-	};
+/** reset PXI hardware to a known state */
+void pxiReset(void);
 
-	void Reset(void);
+/** check receive & send FIFO status */
+uint pxiRecvEmpty(void);
+uint pxiSendFull(void);
 
-	uint RecvEmpty(void);
+/** receive and send data through the PXI FIFO */
+u32 pxiRecvMsg(void);
+void pxiSendMsg(u32 msg);
 
-	u32 Recv(void);
-	void Send(u32 w);
-
-	void SendData(const u32 *data, uint n);
-	void RecvData(u32 *data, uint n);
-
-	u8 RecvSync(void);
-	void SendSync(u8 data);
-	void TriggerSync(void);
-}
+/** manipulate the PXI SYNC block */
+u8 pxiRecvSync(void);
+void pxiSendSync(u8 data);
+void pxiTriggerSync(void);

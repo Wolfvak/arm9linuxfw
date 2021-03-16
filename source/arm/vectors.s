@@ -3,9 +3,10 @@
 .arm
 
 #define TRAP_BITOFF 28
+#define ABT_STACK_SIZE 512
 
-.macro TRAP_ENTRY xrq_id
-	msr cpsr_f, #(\xrq_id << TRAP_BITOFF)    @ preserve exception source (idea grabbed from fb3ds)
+.macro TRAP_ENTRY x
+	msr cpsr_f, #(\x << TRAP_BITOFF) @ preserve exception source (idea grabbed from fb3ds)
 .endm
 
 .section .vector, "ax"
@@ -13,7 +14,7 @@
 .global vector
 vector:
 	ldr pc, _irq_vector
-	_irq_vector: .word ProcessRootIRQ_FromC
+	_irq_vector: .word irqProcess
 	ldr pc, _fiq_vector
 	_fiq_vector: .word fiq_handler
 	ldr pc, _svc_vector
@@ -47,7 +48,7 @@ fiq_handler:
 	TRAP_ENTRY 4
 
 _exception_fatal:
-	ldr sp, =(abort_stack - 18*4)
+	ldr sp, =(abtStk - 18*4)
 	stmia sp, {r0-r7}               @ store the non-banked GPRs
 
 	mrs r1, cpsr
@@ -66,12 +67,9 @@ _exception_fatal:
 
 	add r3, sp, #8*4
 	msr cpsr_c, r2
-	nop
 	stmia r3, {r8-r14}              @ store remaining prev mode registers
-									@ including banked FIQ if needed
-	nop
+									@ including banked FIQ regs if needed
 	msr cpsr_c, r1                  @ and return back to the exception mode
-	nop
 
 	str lr, [sp, #15*4]             @ store exception PC
 	mov r1, sp
@@ -85,5 +83,8 @@ _exception_fatal:
 
 .section .bss.stacks
 .align 3
-	.space (64 * 4)
-abort_stack:
+
+.global abtStk
+abtStkBottom:
+	.space ABT_STACK_SIZE
+abtStk:

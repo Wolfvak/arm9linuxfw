@@ -4,7 +4,7 @@ ENTRY(__start)
 
 MEMORY
 {
-  AHBRAM  (RWX) : ORIGIN = 0x08080000, LENGTH = 128K
+  AHBRAM  (RWX) : ORIGIN = 0x08080000, LENGTH = 48K
   VECTOR  (RWX) : ORIGIN = 0x08000000, LENGTH = 64
   ITCM    (RWX) : ORIGIN = 0x01FF8000, LENGTH = 32K
   DTCM    (RW)  : ORIGIN = 0x40000000, LENGTH = 16K
@@ -14,10 +14,12 @@ SECTIONS
 {
     .bootstrap : ALIGN(16)
     {
+        __bootstrap_start = ABSOLUTE(.);
         KEEP(*(.bootstrap))
         . = ALIGN(16);
     } >AHBRAM
 
+    /* .vector, .text and .data get relocated on boot */
     .vector : ALIGN(16)
     {
         __vector_lma = LOADADDR(.vector);
@@ -42,16 +44,14 @@ SECTIONS
         __data_lma = LOADADDR(.data);
         __data_s = ABSOLUTE(.);
 
-        __init_s = ABSOLUTE(.);
-        KEEP(*(.init_array*));
-        __init_e = ABSOLUTE(.);
-
-        __fini_s = ABSOLUTE(.);
-        KEEP(*(.fini_array*)); /* unused */
-        __fini_e = ABSOLUTE(.);
-
         *(.data*)
         *(.rodata*)
+
+        . = ALIGN(16);
+
+        __vdev_s = ABSOLUTE(.);
+        KEEP(*(.vdev_list));
+        __vdev_cnt = (ABSOLUTE(.) - __vdev_s) / 4;
 
         . = ALIGN(16);
         __data_e = ABSOLUTE(.);
@@ -63,8 +63,5 @@ SECTIONS
         *(.bss*)
         . = ALIGN(16);
         __bss_e = ABSOLUTE(.);
-        __heap_s = ABSOLUTE(.);
     } >DTCM
-
-    __heap_e = ORIGIN(DTCM) + LENGTH(DTCM);
 }

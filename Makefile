@@ -1,15 +1,14 @@
-ifeq ($(strip $(DEVKITARM)),)
-$(error "Please set DEVKITARM in your environment. export DEVKITARM=<path to>devkitARM>")
-endif
-
-include $(DEVKITARM)/base_tools
-
 TARGET  := $(shell basename $(CURDIR))
+
+TRIPLET ?= arm-none-eabi
+CC := $(TRIPLET)-gcc
+OBJCOPY := $(TRIPLET)-objcopy
 
 SOURCE  := source
 BUILD   := build
 INCDIR	:= include
-SUBARCH := -mcpu=arm946e-s -mfloat-abi=soft -marm -mno-thumb-interwork -ggdb
+SUBARCH := -mcpu=arm946e-s -mfloat-abi=soft -marm -mno-thumb-interwork \
+			-ggdb -nostdlib -ffreestanding -nostartfiles -lgcc
 
 DBG_FLAG :=
 # ifneq ($(RELEASE),)
@@ -18,22 +17,19 @@ DBG_FLAG :=
 
 INCLUDE := -I$(SOURCE) -I$(INCDIR)
 ASFLAGS := $(SUBARCH) $(INCLUDE) -x assembler-with-cpp
-CXXFLAGS := $(SUBARCH) $(INCLUDE) -MMD -MP -std=c++1z -O2 -pipe -Wall -Wextra \
+CFLAGS := $(SUBARCH) $(INCLUDE) -MMD -MP -std=c11 -Os -pipe -Wall -Wextra \
 			-Wno-unused-variable -Wno-unused-parameter -Wno-unused-function \
-			-ffunction-sections -fdata-sections -ffreestanding -nostartfiles \
-			-fno-rtti -fno-exceptions -fomit-frame-pointer -ffast-math -nostdlib \
-			$(DBG_FLAG)
+			-ffunction-sections -fomit-frame-pointer -ffast-math $(DBG_FLAG)
 
-LDFLAGS := -Tlink.ld -Wl,--gc-sections,--nmagic,-z,max-page-size=4 \
-           -nostartfiles $(SUBARCH) -ffreestanding -nostdlib
+LDFLAGS := -Tlink.ld -Wl,--gc-sections,--nmagic,-z,max-page-size=4 $(SUBARCH)
 
 rwildcard = $(foreach d, $(wildcard $1*), \
             $(filter $(subst *, %, $2), $d) \
             $(call rwildcard, $d/, $2))
 
-SOURCE_OUTPUT := $(patsubst $(SOURCE)/%.cc, $(BUILD)/%.cc.o, \
+SOURCE_OUTPUT := $(patsubst $(SOURCE)/%.c, $(BUILD)/%.c.o, \
 				$(patsubst $(SOURCE)/%.s, $(BUILD)/%.s.o, \
-				$(call rwildcard, $(SOURCE), *.s *.cc)))
+				$(call rwildcard, $(SOURCE), *.s *.c)))
 
 .PHONY: all
 all: $(TARGET).bin
@@ -47,12 +43,12 @@ $(TARGET).bin: $(TARGET).elf
 
 $(TARGET).elf: $(SOURCE_OUTPUT)
 	@mkdir -p "$(@D)"
-	@$(CXX) $(LDFLAGS) $^ -o $@
+	@$(CC) $(LDFLAGS) $^ -o $@
 
-$(BUILD)/%.cc.o: $(SOURCE)/%.cc
+$(BUILD)/%.c.o: $(SOURCE)/%.c
 	@mkdir -p "$(@D)"
 	@echo "  $<"
-	@$(CXX) -c $(CXXFLAGS) -o $@ $<
+	@$(CC) -c $(CFLAGS) -o $@ $<
 
 $(BUILD)/%.s.o: $(SOURCE)/%.s
 	@mkdir -p "$(@D)"

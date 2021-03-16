@@ -23,17 +23,17 @@
  */
 
 #include "common.h"
-#include "sdmmc.h"
+#include "hw/sdmmc.h"
+
+#include "arm/arm.h"
 
 #define DATA32_SUPPORT
-
 
 struct mmcdevice handleNAND;
 struct mmcdevice handleSD;
 
-static inline void wait(u32 t) { while(t--) asmv("mov r0, r0\n\t":::"r0", "memory"); }
-
-static inline void wait_msec(u32 ms) { wait(ms); }
+#define wait	armDelayCycles
+#define wait_msec	armDelayCycles
 
 mmcdevice *getMMCDevice(int drive)
 {

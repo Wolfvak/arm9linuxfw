@@ -2,207 +2,151 @@
 
 #include "common.h"
 
-namespace ARM {
-	#define MCR(cp, op1, reg, crn, crm, op2) \
-		asmv( \
-		"MCR " #cp ", " #op1 ", %[R], " #crn ", " #crm ", " #op2 "\n\t" \
-		:: [R] "r"(reg) : "memory", "cc")
+#include "arm/bfn.h"
 
-	#define MRC(cp, op1, reg, crn, crm, op2) \
-		asmv( \
-		"MRC " #cp ", " #op1 ", %[R], " #crn ", " #crm ", " #op2 "\n\t" \
-		: [R] "=r"(reg) :: "memory", "cc")
+/** ARM assembly wrappers */
+#define ARM_MCR(cp, op1, reg, crn, crm, op2) \
+	asmv( \
+	"MCR " #cp ", " #op1 ", %[R], " #crn ", " #crm ", " #op2 "\n\t" \
+	:: [R] "r"(reg) : "memory", "cc")
 
-	#define MSR(cp, reg) \
-		asmv( \
-		"MSR " #cp ", %[R]\n\t" \
-		:: [R] "r"(reg) : "memory", "cc")
+#define ARM_MRC(cp, op1, reg, crn, crm, op2) \
+	asmv( \
+	"MRC " #cp ", " #op1 ", %[R], " #crn ", " #crm ", " #op2 "\n\t" \
+	: [R] "=r"(reg) :: "memory", "cc")
 
-	#define MRS(reg, cp) \
-		asmv( \
-		"MRS %[R], " #cp "\n\t" \
-		: [R] "=r"(reg) :: "memory", "cc")
+#define ARM_MSR(cp, reg) \
+	asmv( \
+	"MSR " #cp ", %[R]\n\t" \
+	:: [R] "r"(reg) : "memory", "cc")
 
-	enum Mode {
-		User = 0x10,
-		FIQ = 0x11,
-		IRQ = 0x12,
-		Supervisor = 0x13,
-		Abort = 0x17,
-		Undefined = 0x18,
-		System = 0x1F,
-	};
+#define ARM_MRS(reg, cp) \
+	asmv( \
+	"MRS %[R], " #cp "\n\t" \
+	: [R] "=r"(reg) :: "memory", "cc")
 
-	#define ModeMask 0xF
-	#define IntDisableMask	0xC0
+/** ARM processor constants */
 
-	static constexpr u32 ICacheSize(void) {
-		return 0x1000;
-	}
+/** CPSR interrupt mask - disables interrupts when set */
+#define ARM_INT_MASK	0xC0
 
-	static constexpr u32 DCacheSize(void) {
-		return 0x1000;
-	}
+/** instruction cache size */
+#define ARM_ICACHE_SIZE 4096
 
-	static inline void DSB(void) {
-		MCR(p15, 0, 0, c7, c10, 4);
-	}
+/** data cache size */
+#define ARM_DCACHE_SIZE 4096
 
-	static inline void InvIC(void) {
-		MCR(p15, 0, 0, c7, c5, 0);
-	}
 
-	static inline void InvIC_Range(void *start, size_t len) {
-		u32 addr = (u32)start & ~0x1F;
-		len >>= 5;
+/** performs a data sync barrier and makes sure the write
+ *  buffer is empty before proceeding to the next instruction */
+static inline void armDataSyncBarrier(void) {
+	ARM_MCR(p15, 0, 0, c7, c10, 4);
+}
 
-		if (len >= ICacheSize()) {
-			InvIC();
-			return;
-		}
+/** invalidates the entire instruction cache */
+static inline void armInvalidateInstCache(void) {
+	ARM_MCR(p15, 0, 0, c7, c5, 0);
+}
 
-		do {
-			MCR(p15, 0, addr, c7, c5, 1);
-			addr += 0x20;
-		} while(len--);
-	}
+/** invalidates a range of the instruction cache */
+static inline void armInvalidateInstCacheRange(u32 addr, size_t len) {
+	((void (*)(u32, u32))(BFN_INVALIDATE_ICACHE_RANGE))(addr, len);
+}
 
-	static inline void InvDC(void) {
-		MCR(p15, 0, 0, c7, c6, 0);
-	}
+/** invalidates the entire data cache */
+static inline void armInvalidateDataCache(void) {
+	ARM_MCR(p15, 0, 0, c7, c6, 0);
+}
 
-	static inline void InvDC_Range(void *start, size_t len) {
-		u32 addr = (u32)start & ~0x1F;
-		len >>= 5;
+/** invalidates a range of the data cache */
+static inline void armInvalidateDataCacheRange(u32 addr, size_t len) {
+	((void (*)(u32, u32))(BFN_INVALIDATE_DCACHE_RANGE))(addr, len);
+}
 
-		if (len >= DCacheSize()) {
-			InvDC();
-			return;
-		}
+/** writes back the entire data cache */
+static inline void armWritebackDataCache(void) {
+	((void (*)(void))(BFN_WRITEBACK_DCACHE))();
+}
 
-		do {
-			MCR(p15, 0, addr, c7, c6, 1);
-			addr += 0x20;
-		} while(len--);
-	}
+/** writes back a range of the data cache */
+static inline void armWritebackDataCacheRange(u32 addr, size_t len) {
+	((void (*)(u32, u32))(BFN_WRITEBACK_DCACHE_RANGE))(addr, len);
+}
 
-	static inline void WbDC(void) {
-		u32 seg = 0;
-		do {
-			u32 ind = 0;
-			do {
-				MCR(p15, 0, seg | ind, c7, c10, 2);
-				ind += 0x20;
-			} while(ind < 0x400);
-			seg += 0x40000000;
-		} while(seg != 0);
-	}
+/** writes back and invalidates the entire data cache */
+static inline void armWritebackInvalidateDataCache(void) {
+	((void (*)(void))(BFN_WRITEBACK_INVALIDATE_DCACHE))();
+}
 
-	static inline void WbDC_Range(void *start, size_t len) {
-		u32 addr = (u32)start & ~0x1F;
-		len >>= 5;
+/** writes back and invalidates a range of the data cache */
+static inline void armWritebackInvalidateDataCacheRange(u32 addr, size_t len) {
+	((void (*)(u32, u32))(BFN_WRITEBACK_INVALIDATE_DCACHE_RANGE))(addr, len);
+}
 
-		if (len >= DCacheSize()) {
-			WbDC();
-			return;
-		}
+/** delays program execution by a given number of cycles */
+static inline void armDelayCycles(u32 cycles) {
+	((void (*)(u32))(BFN_WAITCYCLES))(cycles);
+}
 
-		do {
-			MCR(p15, 0, addr, c7, c10, 1);
-			addr += 0x20;
-		} while(len--);
-	}
+/** preserves the interrupt state and disables interrupts */
+static inline u32 armEnterCritical(void) {
+	u32 sr;
+	ARM_MRS(sr, cpsr);
+	ARM_MSR(cpsr_c, sr | ARM_INT_MASK);
+	return sr & ARM_INT_MASK;
+}
 
-	static inline void WbInvDC(void) {
-		u32 seg = 0;
-		do {
-			u32 ind = 0;
-			do {
-				MCR(p15, 0, seg | ind, c7, c14, 2);
-				ind += 0x20;
-			} while(ind < 0x400);
-			seg += 0x40000000;
-		} while(seg != 0);
-	}
+/** restores the interrupt state after a critical section */
+static inline void armLeaveCritical(u32 stat) {
+	u32 sr;
+	ARM_MRS(sr, cpsr);
+	sr = (sr & ~ARM_INT_MASK) | stat;
+	ARM_MSR(cpsr_c, sr);
+}
 
-	static inline void WbInvDC_Range(void *start, size_t len) {
-		u32 addr = (u32)start & ~0x1F;
-		len >>= 5;
+/** enables processor interrupts */
+static inline void armEnableInterrupts(void) {
+	u32 sr;
+	ARM_MRS(sr, cpsr);
+	ARM_MSR(cpsr_c, sr & ~ARM_INT_MASK);
+}
 
-		if (len >= DCacheSize()) {
-			WbInvDC();
-			return;
-		}
+/** disables processor interrupts */
+static inline void armDisableInterrupts(void) {
+	u32 sr;
+	ARM_MRS(sr, cpsr);
+	ARM_MSR(cpsr_c, sr | ARM_INT_MASK);
+}
 
-		do {
-			MCR(p15, 0, addr, c7, c14, 1);
-			addr += 0x20;
-		} while(len--);
-	}
+/** returns non-zero if processor interrupts are disabled */
+static inline uint armInCritical(void) {
+	u32 sr;
+	ARM_MRS(sr, cpsr);
+	return sr & ARM_INT_MASK;
+}
 
-	static inline u32 CPSR_Get(void) {
-		u32 sr;
-		MRS(sr, cpsr);
-		return sr;
-	}
+/** sleeps until an interrupt triggers wakeup */
+static inline void armWaitForInterrupt(void) {
+	armDataSyncBarrier();
+	ARM_MCR(p15, 0, 0, c7, c0, 4);
+}
 
-	static inline void CPSR_Set(u32 sr) {
-		MSR(cpsr, sr);
-	}
+/** performs an atomic word swap */
+static inline u32 armSWP(u32 val, u32 *addr) {
+	u32 old;
+	asmv(
+		"swp %0, %1, [ %2 ]\n\t"
+		: "=r"(old) : "r"(val), "r"(addr) : "memory"
+	);
+	return old;
+}
 
-	static inline void CPSR_c_Set(u32 sr) {
-		MSR(cpsr_c, sr);
-	}
-
-	static inline void EnableInterrupts(void) {
-		CPSR_c_Set(CPSR_Get() & ~IntDisableMask);
-	}
-
-	static inline void DisableInterrupts(void) {
-		CPSR_c_Set(CPSR_Get() | IntDisableMask);
-	}
-
-	static inline u32 EnterCritical(void) {
-		u32 stat = CPSR_Get();
-		CPSR_c_Set(stat | IntDisableMask);
-		return stat & IntDisableMask;
-	}
-
-	static inline void LeaveCritical(u32 flags) {
-		CPSR_c_Set((CPSR_Get() & ~IntDisableMask) | flags);
-	}
-
-	static inline bool InCritical(void) {
-		return (CPSR_Get() & IntDisableMask) != 0;
-	}
-
-	static inline void WaitForInterrupt(void) {
-		DSB();
-		MCR(p15, 0, 0, c7, c0, 4);
-	}
-
-	static inline u32 Swap(u32 nword, u32 *addr) {
-		u32 loaded = 0;
-		asmv(
-			"swp %[ld], %[og], [ %[ad] ]\n\t"
-			: [ld] "+r"(loaded) : [og] "r"(nword), [ad] "r"(addr) : "memory"
-		);
-		return loaded;
-	}
-
-	static inline u8 SwapByte(u8 nbyte, u8 *addr) {
-		u8 loaded = 0;
-		asmv(
-			"swpb %[ld], %[og], [ %[ad] ]\n\t"
-			: [ld] "+r"(loaded) : [og] "r"(nbyte), [ad] "r"(addr) : "memory"
-		);
-		return loaded;
-	}
-
-	class CriticalSection {
-	public:
-		CriticalSection(void) : irqf(ARM::EnterCritical()) { }
-		~CriticalSection(void) { ARM::LeaveCritical(this->irqf); }
-		u32 irqf;
-	};
+/** atomic byte swap */
+static inline u32 armSWPB(u8 val, u8 *addr) {
+	u32 old;
+	asmv(
+		"swpb %0, %1, [ %2 ]\n\t"
+		: "=r"(old) : "r"(val), "r"(addr) : "memory"
+	);
+	return old;
 }
