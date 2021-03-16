@@ -19,8 +19,7 @@ static prngRegs *getPrngRegs(void) {
 	return (prngRegs*)(REG_PRNG_BASE);
 }
 
-static void hwrngProcessQueue(virtDev_s *vdev, virtQueue_s *vq)
-{
+static void hwrngProcessQueue(virtDev_s *vdev, virtQueue_s *vq) {
 	virtJob_s vjob;
 	prngRegs *regs = getPrngRegs();
 

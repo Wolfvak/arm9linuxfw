@@ -8,6 +8,6 @@ typedef struct virtJob_s {
 	u32 totalWritten;
 } virtJob_s;
 
-static inline void virtJobAddWritten(virtJob_s *vjob, u32 written) {
+static inline void virtJobAddWritten(virtJob_s *vjob, s32 written) {
 	vjob->totalWritten += written;
 }

@@ -98,12 +98,8 @@ static void sdmmc_send_command(struct mmcdevice *ctx, u32 cmd, u32 args)
 	while(1)
 	{
 		volatile u16 status1 = sdmmc_read16(REG_SDSTATUS1);
-#ifdef DATA32_SUPPORT
 		volatile u16 ctl32 = sdmmc_read16(REG_DATACTL32);
 		if((ctl32 & 0x100))
-#else
-		if((status1 & TMIO_STAT1_RXRDY))
-#endif
 		{
 			if(readdata)
 			{
@@ -112,43 +108,13 @@ static void sdmmc_send_command(struct mmcdevice *ctx, u32 cmd, u32 args)
 					sdmmc_mask16(REG_SDSTATUS1, TMIO_STAT1_RXRDY, 0);
 					if(size >= blkSize)
 					{
-						#ifdef DATA32_SUPPORT
-						if(!((u32)rDataPtr32 & 3))
+						for(u32 i = 0; i < blkSize; i += 16)
 						{
-							for(u32 i = 0; i < blkSize; i += 4)
-							{
-								*rDataPtr32++ = sdmmc_read32(REG_SDFIFO32);
-							}
+							*rDataPtr32++ = sdmmc_read32(REG_SDFIFO32);
+							*rDataPtr32++ = sdmmc_read32(REG_SDFIFO32);
+							*rDataPtr32++ = sdmmc_read32(REG_SDFIFO32);
+							*rDataPtr32++ = sdmmc_read32(REG_SDFIFO32);
 						}
-						else
-						{
-							for(u32 i = 0; i < blkSize; i += 4)
-							{
-								u32 data = sdmmc_read32(REG_SDFIFO32);
-								*rDataPtr8++ = data;
-								*rDataPtr8++ = data >> 8;
-								*rDataPtr8++ = data >> 16;
-								*rDataPtr8++ = data >> 24;
-							}
-						}
-						#else
-						if(!((u32)rDataPtr16 & 1))
-						{
-							for(u32 i = 0; i < blkSize; i += 4)
-							{
-								*rDataPtr16++ = sdmmc_read16(REG_SDFIFO);
-							}
-						}
-						else
-						{
-							for(u32 i = 0; i < blkSize; i += 4)
-							{
-								u16 data = sdmmc_read16(REG_SDFIFO);
-								*rDataPtr8++ = data;
-								*rDataPtr8++ = data >> 8;
-							}
-						}
-						#endif
 						size -= blkSize;
 					}
 				}
@@ -156,11 +122,7 @@ static void sdmmc_send_command(struct mmcdevice *ctx, u32 cmd, u32 args)
 				sdmmc_mask16(REG_DATACTL32, 0x800, 0);
 			}
 		}
-#ifdef DATA32_SUPPORT
 		if(!(ctl32 & 0x200))
-#else
-		if((status1 & TMIO_STAT1_TXRQ))
-#endif
 		{
 			if(writedata)
 			{
@@ -169,43 +131,13 @@ static void sdmmc_send_command(struct mmcdevice *ctx, u32 cmd, u32 args)
 					sdmmc_mask16(REG_SDSTATUS1, TMIO_STAT1_TXRQ, 0);
 					if(size >= blkSize)
 					{
-						#ifdef DATA32_SUPPORT
-						if(!((u32)tDataPtr32 & 3))
+						for(u32 i = 0; i < blkSize; i += 16)
 						{
-							for(u32 i = 0; i < blkSize; i += 4)
-							{
-								sdmmc_write32(REG_SDFIFO32, *tDataPtr32++);
-							}
+							sdmmc_write32(REG_SDFIFO32, *tDataPtr32++);
+							sdmmc_write32(REG_SDFIFO32, *tDataPtr32++);
+							sdmmc_write32(REG_SDFIFO32, *tDataPtr32++);
+							sdmmc_write32(REG_SDFIFO32, *tDataPtr32++);
 						}
-						else
-						{
-							for(u32 i = 0; i < blkSize; i += 4)
-							{
-								u32 data = *tDataPtr8++;
-								data |= (u32)*tDataPtr8++ << 8;
-								data |= (u32)*tDataPtr8++ << 16;
-								data |= (u32)*tDataPtr8++ << 24;
-								sdmmc_write32(REG_SDFIFO32, data);
-							}
-						}
-						#else
-						if(!((u32)tDataPtr16 & 1))
-						{
-							for(u32 i = 0; i < blkSize; i += 2)
-							{
-								sdmmc_write16(REG_SDFIFO, *tDataPtr16++);
-							}
-						}
-						else
-						{
-							for(u32 i = 0; i < blkSize; i += 2)
-							{
-								u16 data = *tDataPtr8++;
-								data |= (u16)(*tDataPtr8++ << 8);
-								sdmmc_write16(REG_SDFIFO, data);
-							}
-						}
-						#endif
 						size -= blkSize;
 					}
 				}
@@ -213,6 +145,7 @@ static void sdmmc_send_command(struct mmcdevice *ctx, u32 cmd, u32 args)
 				sdmmc_mask16(REG_DATACTL32, 0x1000, 0);
 			}
 		}
+
 		if(status1 & TMIO_MASK_GW)
 		{
 			ctx->error |= 4;

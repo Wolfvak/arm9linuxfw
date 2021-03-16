@@ -10,8 +10,8 @@
 extern u32 __vdev_s;
 extern u32 __vdev_cnt;
 
-/* list of devices that MIGHT have pending jobs */
-static listHead_s vdevPendingList;
+/* list of queues that MIGHT have pending jobs */
+static listHead_s vqueuePendingList;
 
 static virtDev_s *virtDevGetUnsafe(uint n) {
 	return ((virtDev_s *const *)(&__vdev_s))[n];
@@ -33,11 +33,11 @@ void virtDevInitAll(void)
 {
 	/*
 	 - initialize virtual IRQ subsystem
-	 - initialize global pending device list
+	 - initialize global pending vq list
 	 - initialize each device
 	*/
 	virtIrqReset();
-	listHeadInit(&vdevPendingList);
+	listHeadInit(&vqueuePendingList);
 	for (uint i = 0; i < virtDevCount(); i++)
 		virtDevInit(virtDevGetUnsafe(i), i);
 }
@@ -103,7 +103,6 @@ void virtDevWriteReg(uint dev, uint reg, u32 val)
 {
 	uint rtype;
 	virtDev_s *vdev;
-	bool enqueueDev = false;
 
 	virtManagerDecodeReg(&reg, &rtype);
 
@@ -118,16 +117,11 @@ void virtDevWriteReg(uint dev, uint reg, u32 val)
 
 	switch(rtype) {
 		case DeviceReg:
-			enqueueDev = virtDevInternalRegWrite(vdev, reg, val); break;
+			virtDevInternalRegWrite(vdev, reg, val); break;
 		case ConfigReg:
-			enqueueDev = virtDevCfgWrite(vdev, reg, val); break;
+			virtDevCfgWrite(vdev, reg, val); break;
 		case QueueReg:
-			enqueueDev = virtDevQueueRegWrite(vdev, reg & 0x7F, reg >> 7, val); break;
-	}
-
-	if (enqueueDev) {
-		/* add the device to the processing queue if needed */
-		listAppendIfNotEmbedded(&vdev->node, &vdevPendingList);
+			virtDevQueueRegWrite(vdev, reg & 0x7F, reg >> 7, val); break;
 	}
 }
 
@@ -136,76 +130,37 @@ virtDev_s *virtQueueOwner(virtQueue_s *vq)
 	return virtDevGetUnsafe(vq->owner);
 }
 
-bool virtDevProcessPending(void)
+bool virtManagerProcessPending(void)
 {
 	bool ret = true;
-	virtDev_s *vdev;
-	listNode_s *nextDev, *nextVq;
+	virtQueue_s *vq;
+	listNode_s *nextVq;
 
 	u32 critSection = armEnterCritical();
 
 	do {
-		if (listEmpty(&vdevPendingList)) {
-			// no devices left to process
+		if (listEmpty(&vqueuePendingList)) {
+			// no queues left to process
 			// let the system sleep a bit
 			ret = false;
 			break;
 		}
 
-		nextDev = listHead(&vdevPendingList);
-		vdev = CONTAINER_OF(nextDev, virtDev_s, node);
-
-		if (listEmpty(&vdev->qlist)) {
-			// no queues left to process in this device
-			// remove the device from the list and return
-			listRemove(nextDev);
-			break;
-		}
-
-		// take the queue of the pending vq list
-		nextVq = listNext(&vdev->qlist);
+		nextVq = listHead(&vqueuePendingList);
 		listRemove(nextVq);
+
+		vq = CONTAINER_OF(nextVq, virtQueue_s, node);
 
 		// alert the device that there MIGHT be pending
 		// descriptors in this virtqueue
-		virtDevProcessQueue(vdev, CONTAINER_OF(nextVq, virtQueue_s, node));
+		virtDevProcessQueue(virtQueueOwner(vq), vq);
 	} while(0);
 
 	armLeaveCritical(critSection);
 	return ret;
 }
 
-/*
-	nextVq = listNext(&vdev->qlist);
-	vq = CONTAINER_OF(nextVq, virtQueue_s, node);
-
-	firstBufIndex = currentBufIndex = virtQueueFetchFirst(vq);
-	if (firstBufIndex < 0) {
-		// no more vqueue buffers are present, take the vqueue off the list
-		listRemove(nextVq);
-		armLeaveCritical(critSection);
-		return true;
-	}
-
-	writeLen = 0;
-	do { // process all the virtbuffers corresponding to a single descriptor
-		virtBuf_s vbuf = virtQueueGetDesc(vq, currentBufIndex);
-		if (UNLIKELY(!virtBufValid(&vbuf))) {
-			// bad index, break out and zero writeLen
-			writeLen = 0;
-			break;
-		}
-
-		writeLen += virtDevProcessBuffer(vdev, vq, vbuf);
-		currentBufIndex = virtQueueFetchNext(vq, currentBufIndex);
-	} while(currentBufIndex >= 0);
-
-	virtQueuePushUsed(vq, firstBufIndex, writeLen);
-
-	// notify the driver that something happened
-	virtIrqSet(virtDevId(vdev), VIRQ_VQUEUE);
-
-	armLeaveCritical(critSection);
-	return true;
+bool virtManagerAddPending(virtQueue_s *vq)
+{
+	return listAppendIfNotEmbedded(&vq->node, &vqueuePendingList);
 }
-*/

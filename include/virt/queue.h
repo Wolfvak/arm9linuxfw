@@ -36,7 +36,7 @@ void virtQueueInit(virtQueue_s *vq, uint owner, uint i);
 void virtQueueReset(virtQueue_s *vq);
 
 u32 virtQueueRegRead(virtQueue_s *vq, uint reg);
-bool virtQueueRegWrite(virtQueue_s *vq, uint reg, u32 val);
+void virtQueueRegWrite(virtQueue_s *vq, uint reg, u32 val);
 
 int virtQueueFetchAvailFirst(virtQueue_s *vq);
 int virtQueueFetchAvailNext(virtQueue_s *vq, u16 prev);

@@ -150,3 +150,14 @@ static inline u32 armSWPB(u8 val, u8 *addr) {
 	);
 	return old;
 }
+
+/** process id register getter and setter */
+static inline u32 armGetPID(void) {
+	u32 pid;
+	ARM_MRC(p15, 0, pid, c13, c0, 1);
+	return pid;
+}
+
+static inline void armSetPID(u32 pid) {
+	ARM_MCR(p15, 0, pid, c13, c0, 1);
+}

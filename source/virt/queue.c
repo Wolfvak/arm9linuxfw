@@ -2,6 +2,7 @@
 
 #include "arm/arm.h"
 #include "virt/queue.h"
+#include "virt/manager.h"
 
 enum QueueRegisters {
 	QueueNumMax = 0x00,
@@ -61,51 +62,47 @@ enum {
 };
 
 typedef struct vqDesc_s {
-	vu64 addr; // high 32 bits of address are always ignored
-	vu32 len;
-	vu16 flags;
-	vu16 next;
+	u64 addr; // high 32 bits of address are always ignored
+	u32 len;
+	u16 flags;
+	u16 next;
 } PACKED vqDesc_s;
 
 typedef struct vqAvail_s {
-	vu16 flags;
-	vu16 last;
-	vu16 ring[0];
+	u16 flags;
+	u16 last;
+	u16 ring[0];
 } PACKED vqAvail_s;
 
 typedef struct vqUsed_s {
-	vu16 flags;
-	vu16 last;
-	struct { vu32 id; vu32 len; } PACKED ring[0];
+	u16 flags;
+	u16 last;
+	struct { u32 id; u32 len; } PACKED ring[0];
 } PACKED vqUsed_s;
 
-bool virtQueueRegWrite(virtQueue_s *vq, uint reg, u32 val)
+static void virtQueueSetDescCount(virtQueue_s *vq, u32 val) {
+	/* make sure the size is in range and is a power of two */
+	if ((val <= VIRTQUEUE_MAX_DESC) &&
+		INT_IS_POW2(val)) {
+		vq->sizeMask = val - 1;
+	} else {
+		vq->sizeMask = 0;
+	}
+}
+
+void virtQueueRegWrite(virtQueue_s *vq, uint reg, u32 val)
 {
 	switch(reg) {
 		case QueueNumCurrent:
-			/** blindly assume the value is always a power of two */
-			vq->sizeMask = val - 1;
+			virtQueueSetDescCount(vq, val);
 			break;
 		case QueueReady:
-			vq->ready = val;
+			if (vq->sizeMask > 0)
+				vq->ready = val;
 			break;
-		case QueueNotify:
-		{
-			/*asmv(
-				"mov r0, %0\n\t"
-				"mov r1, %1\n\t"
-				"mov r2, %2\n\t"
-				"mov r3, %3\n\t"
-				"mov r4, %4\n\t"
-				"mov r5, %5\n\t"
-				"mov r6, %6\n\t"
-				"bkpt\n\t"
-				::"r"(vq->owner), "r"(vq->id), "r"(((const vqAvail_s*)(vq->qAvail))->last),
-					"r"(vq->sizeMask), "r"(vq->qDesc), "r"(vq->qAvail), "r"(vq->qUsed)
-				:"memory", "r0", "r1", "r2", "r3", "r4", "r5", "r6"
-			);*/
-			return true;
-		}
+		case QueueNotify: /* new buffers are present */
+			virtManagerAddPending(vq);
+			break;
 		case QueueDesc:
 			vq->qDesc = val;
 			break;
@@ -117,8 +114,6 @@ bool virtQueueRegWrite(virtQueue_s *vq, uint reg, u32 val)
 			break;
 		default: break;
 	}
-
-	return false;
 }
 
 int virtQueueFetchAvailFirst(virtQueue_s *vq)

@@ -28,8 +28,8 @@ enum VirtDevFeatureBits {
 	VDEV_F_ORDER_PLATFORM = BIT(36),
 
 	/**< Flags that are always set by default */
-	VDEV_F_DEFAULT = VDEV_F_VERSION_1 | VDEV_F_ACCESS_PLATFORM |
-		VDEV_F_IN_ORDER | VDEV_F_ORDER_PLATFORM,
+	VDEV_F_DEFAULT = VDEV_F_VERSION_1 |
+		VDEV_F_ACCESS_PLATFORM | VDEV_F_ORDER_PLATFORM,
 };
 
 /** VirtIO device status bits */
@@ -72,9 +72,6 @@ enum VirtDevType {
  and a private device pointer, to use at the coder's discretion.
 */
 typedef struct virtDev_s {
-	listNode_s node;	/**< Node to use in the pending device list */
-	listHead_s qlist;	/**< Head of the pending virtqueue list */
-
 	u32 id;	/**< Internal device ID */
 	const u16 devId;	/**< Device class */
 	u16 status;	/**< Current device status */
@@ -92,7 +89,7 @@ typedef struct virtDev_s {
 	u8 (*rdCfg)(virtDev_s*, uint);
 
 	/**< Write a byte to the config space */
-	bool (*wrCfg)(virtDev_s*, uint, u8);
+	void (*wrCfg)(virtDev_s*, uint, u8);
 
 	/**< Start processing any pending jobs in this virtqueue */
 	void (*prQueue)(virtDev_s*, virtQueue_s*);
@@ -131,10 +128,10 @@ u32 virtDevInternalRegRead(virtDev_s *vdev, uint reg);
 /**
 	Read an internal device register.
 */
-bool virtDevInternalRegWrite(virtDev_s *vdev, uint reg, u32 val);
+void virtDevInternalRegWrite(virtDev_s *vdev, uint reg, u32 val);
 
 u32 virtDevQueueRegRead(virtDev_s *v, uint vqn, u32 reg);
-bool virtDevQueueRegWrite(virtDev_s *v, uint vqn, u32 reg, u32 val);
+void virtDevQueueRegWrite(virtDev_s *v, uint vqn, u32 reg, u32 val);
 
 /** VirtDev operation wrappers */
 #define virtDevHardReset(v)	((v)->hardReset)(v)
@@ -151,5 +148,5 @@ bool virtDevQueueRegWrite(virtDev_s *v, uint vqn, u32 reg, u32 val);
 */
 void virtDevResetStub(virtDev_s *vdev);
 u8 virtDevRdCfgStub(virtDev_s *vdev, uint off);
-bool virtDevWrCfgStub(virtDev_s *vdev, uint off, u8 val);
+void virtDevWrCfgStub(virtDev_s *vdev, uint off, u8 val);
 void virtDevPrQueueStub(virtDev_s *vdev, virtQueue_s *vq);

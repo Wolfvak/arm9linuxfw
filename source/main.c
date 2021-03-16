@@ -58,7 +58,7 @@ void NORETURN arm9linuxfwEntry(void)
 	while(1) {
 		DBG_ASSERT(!armInCritical());
 
-		if (!virtDevProcessPending())
+		if (!virtManagerProcessPending())
 			armWaitForInterrupt();
 	}
 }

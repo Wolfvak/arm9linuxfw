@@ -17,9 +17,9 @@
 
 @ Very simple virtDev operation stubs
 virtDevRdCfgStub:
-virtDevWrCfgStub:
 	mov r0, #0
 
 virtDevResetStub:
+virtDevWrCfgStub:
 virtDevPrQueueStub:
 	bx lr

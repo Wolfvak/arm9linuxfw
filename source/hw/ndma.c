@@ -22,6 +22,8 @@ typedef struct {
 	vu32 cnt;
 } PACKED ndmaChanRegs;
 
+static event_t ndmaXferEvent[NUM_CHANNELS];
+
 static vu32 *getNdmaGlobalCnt(void) {
 	return (vu32*)(REG_NDMA_BASE);
 }
@@ -29,8 +31,6 @@ static vu32 *getNdmaGlobalCnt(void) {
 static ndmaChanRegs *getNdmaChanRegs(u32 chan) {
 	return &((ndmaChanRegs*)(REG_NDMA_BASE + 0x04))[chan];
 }
-
-static event_t ndmaXferEvent[NUM_CHANNELS];
 
 static void ndmaIrqHandler(u32 irqn) {
 	u32 channel = irqn - IRQ_NDMA0;
@@ -52,12 +52,16 @@ void ndmaReset(u32 arbitration_flags)
 
 void ndmaClockControl(u32 chan, u32 control)
 {
+	DBG_ASSERT(chan < NUM_CHANNELS);
 	getNdmaChanRegs(chan)->clk_cnt = control;
 }
 
 void ndmaXferAsync(u32 chan, u32 dst, u32 src, u32 len, u32 flags)
 {
-	ndmaChanRegs *regs = getNdmaChanRegs(chan);
+	ndmaChanRegs *regs;
+	DBG_ASSERT(chan < NUM_CHANNELS);
+
+	regs = getNdmaChanRegs(chan);
 	eventClear(&ndmaXferEvent[chan]);
 
 	regs->src = src;
@@ -71,10 +75,12 @@ void ndmaXferAsync(u32 chan, u32 dst, u32 src, u32 len, u32 flags)
 
 bool ndmaXferDone(u32 chan)
 {
+	DBG_ASSERT(chan < NUM_CHANNELS);
 	return eventTest(&ndmaXferEvent[chan]);
 }
 
 void ndmaXferWait(u32 chan)
 {
+	DBG_ASSERT(chan < NUM_CHANNELS);
 	eventWait(&ndmaXferEvent[chan]);
 }

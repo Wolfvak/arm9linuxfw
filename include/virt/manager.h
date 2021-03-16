@@ -21,34 +21,29 @@ typedef struct virtQueue_s virtQueue_s;
 /** Retrieve an object's private data, with typecasting */
 #define OBJ_GETPRIV(v, t)	((t)((v)->priv))
 
-/** Bitmask that represents changes within the device */
-typedef enum {
-	VDEV_CHANGE_BUFFERS = 0x00, /**< There are new buffers in the used ring */
-	VDEV_CHANGE_CONFIG = 0x01, /**< Internal configuration has changed */
-} VirtDevNotifyMode;
 
 /**
 	Magic macro that declares a VirtIO device and automatically
 	adds it to the global device array at compile time
 
-	name - name of the virtual device object
-	prv - private data pointer
-	devtype - virtual device type id
-	feat - extra device features
-	hr - hardReset function pointer
-	rcfg - rdCfg function pointer
-	wcfg - wrCfg function pointer
-	pbuf - prBuf function pointer
+	@name	- name of the virtual device object
+	@prv	- private data pointer
+	@dclass	- virtual device type id
+	@feat	- extra device features
+	@hrst	- hardReset function pointer
+	@rcfg	- rdCfg function pointer
+	@wcfg	- wrCfg function pointer
+	@pbuf	- prBuf function pointer
 */
-#define DECLARE_VIRTDEV(name, prv, devtype, feat, vn, hr, rcfg, wcfg, pbuf) \
+#define DECLARE_VIRTDEV(name, prv, dclass, feat, vn, hrst, rcfg, wcfg, pbuf) \
 	virtQueue_s name##_vqs[vn]; \
 	virtDev_s name = { \
-		.devId = (devtype), \
+		.devId = (dclass), \
 		.status = 0, \
 		.cfg = 0, \
 		.deviceFeat.dword = (feat) | VDEV_F_DEFAULT, \
 		.driverFeat.dword = 0, \
-		.hardReset = (hr), \
+		.hardReset = (hrst), \
 		.rdCfg = (rcfg), \
 		.wrCfg = (wcfg), \
 		.prQueue = (pbuf), \
@@ -93,7 +88,13 @@ virtDev_s *virtQueueOwner(virtQueue_s *vq);
 	Process pending VirtBuffers in the system
 	Returns false if there are no more buffers left to process
 */
-bool virtDevProcessPending(void);
+bool virtManagerProcessPending(void);
+
+/**
+	Adds a virtQueue to the pending queue list
+	Returns false if it was already present
+*/
+bool virtManagerAddPending(virtQueue_s *vq);
 
 /**
 	Notify the host about changes made to the device
