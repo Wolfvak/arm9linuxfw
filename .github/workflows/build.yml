@@ -6,7 +6,7 @@ jobs:
     runs-on: "ubuntu-20.04"
     steps:
     - uses: "actions/checkout@v2"
-    - run: echo "SHORT_SHA=`echo ${GITHUB_SHA} | cut -c1-8`" >> $GITHUB_ENV
+    - run: echo "SHORT_SHA=`echo ${GITHUB_SHA} | cut -c1-7`" >> $GITHUB_ENV
     - run: |
         sudo apt-get install -y gcc-arm-none-eabi binutils-arm-none-eabi
     - run: "make"
