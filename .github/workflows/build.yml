@@ -1,15 +1,20 @@
-name: build
-on: [push, pull_request]
+name: "build"
+on: [push]
 
 jobs:
   build:
-    runs-on: ubuntu-20.04
+    runs-on: "ubuntu-20.04"
     steps:
-    - uses: actions/checkout@v2
+    - uses: "actions/checkout@v2"
+    - run: echo "SHORT_SHA=`echo ${GITHUB_SHA} | cut -c1-7`" >> $GITHUB_ENV
     - run: |
         sudo apt-get install -y gcc-arm-none-eabi binutils-arm-none-eabi
-    - run: make
-    - uses: actions/upload-artifact@v2
+    - run: "make"
+    - uses: "marvinpinto/action-automatic-releases@latest"
       with:
-        name: arm9linuxfw
-        path: ./arm9linuxfw.bin
+        repo_token: "${{ secrets.GITHUB_TOKEN }}"
+        automatic_release_tag: "latest"
+        prerelease: true
+        title: "Development build ${{ env.SHORT_SHA }}"
+        files: |
+          arm9linuxfw.bin
